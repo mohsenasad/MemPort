@@ -17,7 +17,7 @@ from datetime import date, timedelta
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import yfinance as yf
+import requests
 
 # ── Portfolio Configuration ───────────────────────────────────────────────────
 
@@ -44,34 +44,24 @@ CREATION_DATE = date(2026, 6, 17)
 
 # ── Price Fetching ────────────────────────────────────────────────────────────
 
+FMP_KEY = st.secrets.get("FMP_API_KEY", "demo")   # add FMP_API_KEY to Streamlit secrets
+
 @st.cache_data(ttl=60)
 def fetch_live(tickers: tuple) -> dict:
-    """Fetch current price + previous close for each ticker. Cached 60 s."""
+    """Fetch current price + previous close via Financial Modeling Prep. Cached 60 s."""
     result = {}
+    symbols = ",".join(tickers)
     try:
-        raw = yf.download(
-            list(tickers), period="5d", interval="1d",
-            progress=False, auto_adjust=True, group_by="ticker"
-        )
-        # group_by="ticker" gives a MultiIndex (ticker, field); handle both layouts
-        if isinstance(raw.columns, pd.MultiIndex):
-            for t in tickers:
-                try:
-                    s = raw[t]["Close"].dropna()
-                except KeyError:
-                    continue
-                if len(s) >= 2:
-                    result[t] = {"price": float(s.iloc[-1]), "prev": float(s.iloc[-2])}
-                elif len(s) == 1:
-                    result[t] = {"price": float(s.iloc[0]), "prev": float(s.iloc[0])}
-        else:
-            # Single-ticker fallback
-            s = raw["Close"].dropna()
-            t = tickers[0]
-            if len(s) >= 2:
-                result[t] = {"price": float(s.iloc[-1]), "prev": float(s.iloc[-2])}
-            elif len(s) == 1:
-                result[t] = {"price": float(s.iloc[0]), "prev": float(s.iloc[0])}
+        # Batch quote endpoint — one call for all tickers
+        url = f"https://financialmodelingprep.com/api/v3/quote/{symbols}?apikey={FMP_KEY}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        for q in resp.json():
+            t = q.get("symbol")
+            price = q.get("price")
+            prev  = q.get("previousClose")
+            if t and price is not None and prev is not None:
+                result[t] = {"price": float(price), "prev": float(prev)}
     except Exception as e:
         st.warning(f"Price fetch error: {e}")
     return result
@@ -79,20 +69,23 @@ def fetch_live(tickers: tuple) -> dict:
 
 @st.cache_data(ttl=3_600)
 def fetch_historical(tickers: tuple, start: date) -> dict:
-    """Fetch first available close on or after `start` (7-day window). Cached 1 h."""
+    """Fetch closing price on or just after `start` via FMP. Cached 1 h."""
     result = {}
-    try:
-        end = start + timedelta(days=8)
-        raw = yf.download(list(tickers), start=start.isoformat(), end=end.isoformat(),
-                          interval="1d", progress=False, auto_adjust=True)
-        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
-        for t in tickers:
-            if t in closes.columns:
-                s = closes[t].dropna()
-                if len(s) > 0:
-                    result[t] = float(s.iloc[0])
-    except Exception as e:
-        st.warning(f"Historical fetch error: {e}")
+    end = start + timedelta(days=8)
+    for t in tickers:
+        try:
+            url = (
+                f"https://financialmodelingprep.com/api/v3/historical-price-full/{t}"
+                f"?from={start.isoformat()}&to={end.isoformat()}&apikey={FMP_KEY}"
+            )
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            hist_data = resp.json().get("historical", [])
+            if hist_data:
+                # FMP returns newest-first; take the last entry (closest to start)
+                result[t] = float(hist_data[-1]["close"])
+        except Exception as e:
+            st.warning(f"Historical fetch error ({t}): {e}")
     return result
 
 # ── Page Setup ────────────────────────────────────────────────────────────────
@@ -146,7 +139,7 @@ with st.sidebar:
     st.divider()
     st.caption(
         "**Holdings:** MU · WDC · LRCX · ONTO · SOXX · EWY\n\n"
-        "**Prices:** Yahoo Finance via yfinance (~15 min delay)\n\n"
+        "**Prices:** Financial Modeling Prep (FMP) free tier\n\n"
         "Actual purchase prices · Jun 2026"
     )
 
@@ -310,7 +303,7 @@ with ch2:
 
 st.caption(
     "Entry prices reflect actual purchase prices (Jun 2026). "
-    "Prices via Yahoo Finance (~15 min delay on free tier). "
+    "Prices via Financial Modeling Prep (FMP). "
     "Not investment advice."
 )
 
