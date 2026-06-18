@@ -222,14 +222,13 @@ st.divider()
 pnl_label = f"P&L % (since {start_date})" if (use_custom and start_date) else "P&L %"
 st.markdown(f"### Holdings  ·  P&L {date_label}")
 
-def _style(row):
-    bg = "#D1FAE5" if row["P&L %"] >= 0 else "#FEE2E2"
-    return ["background-color:" + bg if c in ("P&L $", "P&L %") else "" for c in row.index]
-
 display = df[[
     "Ticker", "Company", "Tier", "Weight", "Shares",
     "Entry", "Price", "Day %", "Value", "P&L $", "P&L %"
 ]].copy()
+
+# Capture numeric P&L % BEFORE formatting to strings, keyed by Ticker
+pnl_numeric = df.set_index("Ticker")["P&L %"]
 
 display["Weight"] = display["Weight"].map("{:.1f}%".format)
 display["Shares"] = display["Shares"].map("{:.3f}".format)
@@ -241,9 +240,15 @@ display["P&L $"]  = display["P&L $"].map(lambda x: f"${x:+,.0f}")
 display["P&L %"]  = display["P&L %"].map("{:+.2f}%".format)
 display = display.rename(columns={"P&L %": pnl_label})
 
-styled = display.set_index("Ticker").style.apply(
-    _style, subset=["P&L $", pnl_label], axis=1
-)
+display_indexed = display.set_index("Ticker")
+
+def _style(row):
+    # Use original numeric value via the ticker index, not the formatted string
+    is_positive = pnl_numeric.get(row.name, 0) >= 0
+    bg = "#D1FAE5" if is_positive else "#FEE2E2"
+    return ["background-color:" + bg if c in ("P&L $", pnl_label) else "" for c in row.index]
+
+styled = display_indexed.style.apply(_style, axis=1)
 st.dataframe(styled, use_container_width=True, height=368)
 
 st.divider()
