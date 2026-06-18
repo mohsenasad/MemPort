@@ -48,27 +48,26 @@ TD_KEY = st.secrets.get("TWELVE_DATA_API_KEY", "")   # add TWELVE_DATA_API_KEY t
 
 @st.cache_data(ttl=60)
 def fetch_live(tickers: tuple) -> dict:
-    """Fetch current price + previous close via Twelve Data. Cached 60 s."""
+    """Fetch current price + previous close via Twelve Data /quote. One call, cached 60 s."""
     result = {}
     try:
-        # Batch price endpoint — one call for all tickers
+        # /quote returns price + previous_close in a single batch call
         symbols = ",".join(tickers)
-        params = {"symbol": symbols, "apikey": TD_KEY}
-        r = requests.get("https://api.twelvedata.com/price", params=params, timeout=10)
+        params  = {"symbol": symbols, "apikey": TD_KEY}
+        r = requests.get("https://api.twelvedata.com/quote", params=params, timeout=15)
         r.raise_for_status()
-        prices = r.json()
+        data = r.json()
 
-        r2 = requests.get("https://api.twelvedata.com/eod", params=params, timeout=10)
-        r2.raise_for_status()
-        prevs = r2.json()
+        # Single ticker returns a dict directly; multiple tickers returns {ticker: dict}
+        if len(tickers) == 1:
+            data = {tickers[0]: data}
 
-        for t in tickers:
-            p_data  = prices.get(t, prices) if len(tickers) > 1 else prices
-            pr_data = prevs.get(t,  prevs)  if len(tickers) > 1 else prevs
-            price = p_data.get("price")
-            prev  = pr_data.get("close")
-            if price is not None and prev is not None:
-                result[t] = {"price": float(price), "prev": float(prev)}
+        for t, q in data.items():
+            if isinstance(q, dict) and q.get("status") != "error":
+                price = q.get("close") or q.get("price")
+                prev  = q.get("previous_close")
+                if price is not None and prev is not None:
+                    result[t] = {"price": float(price), "prev": float(prev)}
     except Exception as e:
         st.warning(f"Price fetch error: {e}")
     return result
