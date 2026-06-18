@@ -44,23 +44,30 @@ CREATION_DATE = date(2026, 6, 17)
 
 # ── Price Fetching ────────────────────────────────────────────────────────────
 
-FMP_KEY = st.secrets.get("FMP_API_KEY", "demo")   # add FMP_API_KEY to Streamlit secrets
+TD_KEY = st.secrets.get("TWELVE_DATA_API_KEY", "")   # add TWELVE_DATA_API_KEY to Streamlit secrets
 
 @st.cache_data(ttl=60)
 def fetch_live(tickers: tuple) -> dict:
-    """Fetch current price + previous close via Financial Modeling Prep. Cached 60 s."""
+    """Fetch current price + previous close via Twelve Data. Cached 60 s."""
     result = {}
-    symbols = ",".join(tickers)
     try:
-        # Batch quote endpoint — one call for all tickers
-        url = f"https://financialmodelingprep.com/api/v3/quote/{symbols}?apikey={FMP_KEY}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        for q in resp.json():
-            t = q.get("symbol")
-            price = q.get("price")
-            prev  = q.get("previousClose")
-            if t and price is not None and prev is not None:
+        # Batch price endpoint — one call for all tickers
+        symbols = ",".join(tickers)
+        params = {"symbol": symbols, "apikey": TD_KEY}
+        r = requests.get("https://api.twelvedata.com/price", params=params, timeout=10)
+        r.raise_for_status()
+        prices = r.json()
+
+        r2 = requests.get("https://api.twelvedata.com/eod", params=params, timeout=10)
+        r2.raise_for_status()
+        prevs = r2.json()
+
+        for t in tickers:
+            p_data  = prices.get(t, prices) if len(tickers) > 1 else prices
+            pr_data = prevs.get(t,  prevs)  if len(tickers) > 1 else prevs
+            price = p_data.get("price")
+            prev  = pr_data.get("close")
+            if price is not None and prev is not None:
                 result[t] = {"price": float(price), "prev": float(prev)}
     except Exception as e:
         st.warning(f"Price fetch error: {e}")
@@ -69,21 +76,24 @@ def fetch_live(tickers: tuple) -> dict:
 
 @st.cache_data(ttl=3_600)
 def fetch_historical(tickers: tuple, start: date) -> dict:
-    """Fetch closing price on or just after `start` via FMP. Cached 1 h."""
+    """Fetch closing price on or just after `start` via Twelve Data. Cached 1 h."""
     result = {}
     end = start + timedelta(days=8)
     for t in tickers:
         try:
-            url = (
-                f"https://financialmodelingprep.com/api/v3/historical-price-full/{t}"
-                f"?from={start.isoformat()}&to={end.isoformat()}&apikey={FMP_KEY}"
-            )
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            hist_data = resp.json().get("historical", [])
-            if hist_data:
-                # FMP returns newest-first; take the last entry (closest to start)
-                result[t] = float(hist_data[-1]["close"])
+            params = {
+                "symbol":     t,
+                "start_date": start.isoformat(),
+                "end_date":   end.isoformat(),
+                "interval":   "1day",
+                "apikey":     TD_KEY,
+            }
+            r = requests.get("https://api.twelvedata.com/time_series", params=params, timeout=10)
+            r.raise_for_status()
+            values = r.json().get("values", [])
+            if values:
+                # Twelve Data returns newest-first; take last (closest to start date)
+                result[t] = float(values[-1]["close"])
         except Exception as e:
             st.warning(f"Historical fetch error ({t}): {e}")
     return result
@@ -139,7 +149,7 @@ with st.sidebar:
     st.divider()
     st.caption(
         "**Holdings:** MU · WDC · LRCX · ONTO · SOXX · EWY\n\n"
-        "**Prices:** Financial Modeling Prep (FMP) free tier\n\n"
+        "**Prices:** Twelve Data free tier (800 calls/day)\n\n"
         "Actual purchase prices · Jun 2026"
     )
 
@@ -303,7 +313,7 @@ with ch2:
 
 st.caption(
     "Entry prices reflect actual purchase prices (Jun 2026). "
-    "Prices via Financial Modeling Prep (FMP). "
+    "Prices via Twelve Data (free tier). "
     "Not investment advice."
 )
 
