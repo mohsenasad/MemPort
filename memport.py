@@ -11,7 +11,6 @@ Quick start
 Tickers: MU · WDC · LRCX · ONTO · SOXX · EWY
 """
 
-import time
 from datetime import date, timedelta
 
 import pandas as pd
@@ -130,7 +129,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    auto_refresh = st.toggle("Auto-refresh every 60 s", value=True)
     st.divider()
 
     st.markdown("### 📅 P&L Start Date")
@@ -316,13 +314,4 @@ st.caption(
     "Not investment advice."
 )
 
-# ── Auto-refresh Countdown ────────────────────────────────────────────────────
 
-if auto_refresh:
-    placeholder = st.empty()
-    for i in range(60, 0, -1):
-        placeholder.caption(f"⏱ Auto-refreshing in {i}s…")
-        time.sleep(1)
-    placeholder.empty()
-    st.cache_data.clear()
-    st.rerun()
