@@ -22,12 +22,12 @@ import requests
 
 HOLDINGS = [
     # ticker  company                          tier                shares  entry
-    ("MU",   "Micron Technology",            "DRAM / NAND",        96,  1086.00),
-    ("WDC",  "Western Digital",              "Storage",            96,   739.00),
-    ("LRCX", "Lam Research",                 "Memory Equipment",  203,   386.00),
-    ("ONTO", "Onto Innovation",              "Memory Equipment",  112,   332.00),
-    ("SOXX", "iShares Semiconductor ETF",    "ETFs",               72,   619.00),
-    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",              171,   212.00),
+    ("MU",   "Micron Technology",            "DRAM / NAND",        96,  1081.00),
+    ("WDC",  "Western Digital",              "Storage",            96,   730.00),
+    ("LRCX", "Lam Research",                 "Memory Equipment",  203,   378.00),
+    ("ONTO", "Onto Innovation",              "Memory Equipment",  112,   327.00),
+    ("SOXX", "iShares Semiconductor ETF",    "ETFs",               72,   608.00),
+    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",              171,   208.00),
 ]
 
 TIER_COLORS = {
