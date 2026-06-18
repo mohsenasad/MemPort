@@ -49,17 +49,29 @@ def fetch_live(tickers: tuple) -> dict:
     """Fetch current price + previous close for each ticker. Cached 60 s."""
     result = {}
     try:
-        raw = yf.download(list(tickers), period="5d", interval="1d",
-                          progress=False, auto_adjust=True)
-        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
-        for t in tickers:
-            if t not in closes.columns:
-                continue
-            s = closes[t].dropna()
+        raw = yf.download(
+            list(tickers), period="5d", interval="1d",
+            progress=False, auto_adjust=True, group_by="ticker"
+        )
+        # group_by="ticker" gives a MultiIndex (ticker, field); handle both layouts
+        if isinstance(raw.columns, pd.MultiIndex):
+            for t in tickers:
+                try:
+                    s = raw[t]["Close"].dropna()
+                except KeyError:
+                    continue
+                if len(s) >= 2:
+                    result[t] = {"price": float(s.iloc[-1]), "prev": float(s.iloc[-2])}
+                elif len(s) == 1:
+                    result[t] = {"price": float(s.iloc[0]), "prev": float(s.iloc[0])}
+        else:
+            # Single-ticker fallback
+            s = raw["Close"].dropna()
+            t = tickers[0]
             if len(s) >= 2:
                 result[t] = {"price": float(s.iloc[-1]), "prev": float(s.iloc[-2])}
             elif len(s) == 1:
-                result[t] = {"price": float(s.iloc[0]),  "prev": float(s.iloc[0])}
+                result[t] = {"price": float(s.iloc[0]), "prev": float(s.iloc[0])}
     except Exception as e:
         st.warning(f"Price fetch error: {e}")
     return result
@@ -149,6 +161,7 @@ if use_custom and start_date:
         hist = fetch_historical(tuple(TICKERS), start_date)
 
 live_count = sum(1 for t in TICKERS if t in live)
+missing = [t for t in TICKERS if t not in live]
 
 # ── Build DataFrame ───────────────────────────────────────────────────────────
 
@@ -156,12 +169,13 @@ rows = []
 for ticker, name, tier, num_shares, default_entry in HOLDINGS:
     alloc   = num_shares * default_entry          # cost basis always at purchase price
     entry   = hist.get(ticker, default_entry) if (use_custom and start_date) else default_entry
-    price   = live.get(ticker, {}).get("price", default_entry)
-    prev    = live.get(ticker, {}).get("prev",  default_entry)
-    value   = price * num_shares
+    live_data = live.get(ticker)
+    price   = live_data["price"] if live_data else None
+    prev    = live_data["prev"]  if live_data else None
+    value   = price * num_shares if price is not None else alloc  # show cost if no live price
     pnl     = value - alloc
     pnl_pct = pnl / alloc * 100
-    day_pct = (price - prev) / prev * 100 if prev else 0.0
+    day_pct = (price - prev) / prev * 100 if (price and prev) else 0.0
 
     rows.append({
         "Ticker":  ticker,
@@ -171,7 +185,7 @@ for ticker, name, tier, num_shares, default_entry in HOLDINGS:
         "Weight":  alloc / TOTAL_ALLOC * 100,
         "Shares":  num_shares,
         "Entry":   default_entry,
-        "Price":   price,
+        "Price":   price if price is not None else float("nan"),
         "Value":   value,
         "Day %":   day_pct,
         "P&L $":   pnl,
@@ -198,6 +212,13 @@ with col_s:
                 unsafe_allow_html=True)
 
 st.divider()
+
+if missing:
+    st.warning(
+        f"⚠️ Could not fetch live prices for: **{', '.join(missing)}**. "
+        "Portfolio Value for these positions shows cost basis, not market value. "
+        "Try clicking ↻ Refresh Prices in the sidebar."
+    )
 
 # ── Summary Metrics ───────────────────────────────────────────────────────────
 
@@ -233,7 +254,7 @@ pnl_numeric = df.set_index("Ticker")["P&L %"]
 display["Weight"] = display["Weight"].map("{:.1f}%".format)
 display["Shares"] = display["Shares"].map("{:.3f}".format)
 display["Entry"]  = display["Entry"].map("${:,.2f}".format)
-display["Price"]  = display["Price"].map("${:,.2f}".format)
+display["Price"]  = display["Price"].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "—")
 display["Value"]  = display["Value"].map("${:,.0f}".format)
 display["Day %"]  = display["Day %"].map("{:+.2f}%".format)
 display["P&L $"]  = display["P&L $"].map(lambda x: f"${x:+,.0f}")
