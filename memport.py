@@ -22,13 +22,13 @@ import yfinance as yf
 # ── Portfolio Configuration ───────────────────────────────────────────────────
 
 HOLDINGS = [
-    # ticker  company                          tier                 alloc (shares×entry)  entry
-    ("MU",   "Micron Technology",            "DRAM / NAND",       96 * 1081, 1081.00),
-    ("WDC",  "Western Digital",              "Storage",           96 *  730.49,  730.49),
-    ("LRCX", "Lam Research",                 "Memory Equipment", 203 *  378.61,  378.61),
-    ("ONTO", "Onto Innovation",              "Memory Equipment", 112 *  327.93,  327.93),
-    ("SOXX", "iShares Semiconductor ETF",    "ETFs",              72 *  608.41,  608.41),
-    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",             171 *  208.44,  208.44),
+    # ticker  company                          tier                shares  entry
+    ("MU",   "Micron Technology",            "DRAM / NAND",        96,  1086.00),
+    ("WDC",  "Western Digital",              "Storage",            96,   739.00),
+    ("LRCX", "Lam Research",                 "Memory Equipment",  203,   386.00),
+    ("ONTO", "Onto Innovation",              "Memory Equipment",  112,   332.00),
+    ("SOXX", "iShares Semiconductor ETF",    "ETFs",               72,   619.00),
+    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",              171,   212.00),
 ]
 
 TIER_COLORS = {
@@ -39,7 +39,7 @@ TIER_COLORS = {
 }
 
 TICKERS     = [h[0] for h in HOLDINGS]
-TOTAL_ALLOC = sum(h[3] for h in HOLDINGS)   # ~$371,562
+TOTAL_ALLOC = sum(h[3] * h[4] for h in HOLDINGS)   # shares × entry  ~$371,562
 CREATION_DATE = date(2026, 6, 17)
 
 # ── Price Fetching ────────────────────────────────────────────────────────────
@@ -153,12 +153,12 @@ live_count = sum(1 for t in TICKERS if t in live)
 # ── Build DataFrame ───────────────────────────────────────────────────────────
 
 rows = []
-for ticker, name, tier, alloc, default_entry in HOLDINGS:
+for ticker, name, tier, num_shares, default_entry in HOLDINGS:
+    alloc   = num_shares * default_entry          # cost basis always at purchase price
     entry   = hist.get(ticker, default_entry) if (use_custom and start_date) else default_entry
-    shares  = alloc / entry
-    price   = live.get(ticker, {}).get("price", entry)
-    prev    = live.get(ticker, {}).get("prev",  entry)
-    value   = price * shares
+    price   = live.get(ticker, {}).get("price", default_entry)
+    prev    = live.get(ticker, {}).get("prev",  default_entry)
+    value   = price * num_shares
     pnl     = value - alloc
     pnl_pct = pnl / alloc * 100
     day_pct = (price - prev) / prev * 100 if prev else 0.0
@@ -169,8 +169,8 @@ for ticker, name, tier, alloc, default_entry in HOLDINGS:
         "Tier":    tier,
         "Alloc":   alloc,
         "Weight":  alloc / TOTAL_ALLOC * 100,
-        "Shares":  shares,
-        "Entry":   entry,
+        "Shares":  num_shares,
+        "Entry":   default_entry,
         "Price":   price,
         "Value":   value,
         "Day %":   day_pct,
