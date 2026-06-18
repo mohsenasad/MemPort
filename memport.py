@@ -23,12 +23,12 @@ import yfinance as yf
 
 HOLDINGS = [
     # ticker  company                          tier                 alloc (shares×entry)  entry
-    ("MU",   "Micron Technology",            "DRAM / NAND",       96 * 1086, 1086.00),
-    ("WDC",  "Western Digital",              "Storage",           96 *  739,  739.00),
-    ("LRCX", "Lam Research",                 "Memory Equipment", 203 *  386,  386.00),
-    ("ONTO", "Onto Innovation",              "Memory Equipment", 112 *  332,  332.00),
-    ("SOXX", "iShares Semiconductor ETF",    "ETFs",              72 *  619,  619.00),
-    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",             171 *  212,  212.00),
+    ("MU",   "Micron Technology",            "DRAM / NAND",       96 * 1081, 1081.00),
+    ("WDC",  "Western Digital",              "Storage",           96 *  730.49,  730.49),
+    ("LRCX", "Lam Research",                 "Memory Equipment", 203 *  378.61,  378.61),
+    ("ONTO", "Onto Innovation",              "Memory Equipment", 112 *  327.93,  327.93),
+    ("SOXX", "iShares Semiconductor ETF",    "ETFs",              72 *  608.41,  608.41),
+    ("EWY",  "iShares MSCI South Korea ETF", "ETFs",             171 *  208.44,  208.44),
 ]
 
 TIER_COLORS = {
